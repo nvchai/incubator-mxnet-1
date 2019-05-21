@@ -172,6 +172,7 @@ struct RNNParam : public dmlc::Parameter<RNNParam> {
   dmlc::optional<int> projection_size;
   dmlc::optional<double> lstm_state_clip_min, lstm_state_clip_max;
   bool lstm_state_clip_nan;
+  int32_t cudnn_algo;
 
   DMLC_DECLARE_PARAMETER(RNNParam) {
     DMLC_DECLARE_FIELD(state_size)
@@ -222,6 +223,9 @@ struct RNNParam : public dmlc::Parameter<RNNParam> {
             "If set to true, this layer takes in an extra input parameter "
             "`sequence_length` "
             "to specify variable length sequence");
+
+    DMLC_DECLARE_FIELD(cudnn_algo).set_default(-1)
+        .describe("Specified RNN Algorithm.");
   }
 };
 
@@ -1317,7 +1321,13 @@ class RNNOp {
       // RNN descriptors
       cudnnDataType_t dtype_with_fallback_;
       #if CUDNN_MAJOR >= 6
-      cudnnRNNAlgo_t rnn_algo = CUDNN_RNN_ALGO_STANDARD;
+      cudnnRNNAlgo_t rnn_algo = (param_.cudnn_algo == -1) ? CUDNN_RNN_ALGO_STANDARD
+                                                : static_cast<cudnnRNNAlgo_t>(param_.cudnn_algo);
+      cudnnDataType_t rnn_math_prec = dtype_;
+      if (rnn_algo == CUDNN_RNN_ALGO_PERSIST_STATIC) {
+        rnn_math_prec = CUDNN_DATA_FLOAT;
+      }
+
       // On arch's 50 and 52(Maxwell), the gpu doesn't support native fp16 compute.
       // Before cuDNN 7.5.0, when running fp16, cuDNN fallback to fp32 under the hood on Maxwell.
       // That's not the case begining from 7.5.0. Thereby adding fallback explicitly here.

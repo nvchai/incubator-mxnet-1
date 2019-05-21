@@ -37,7 +37,7 @@ class _RNNLayer(HybridBlock):
                  i2h_bias_initializer, h2h_bias_initializer,
                  mode, projection_size, h2r_weight_initializer,
                  lstm_state_clip_min, lstm_state_clip_max, lstm_state_clip_nan,
-                 dtype, use_sequence_length=False, **kwargs):
+                 dtype, use_sequence_length=False, cudnn_algo=-1, **kwargs):
         super(_RNNLayer, self).__init__(**kwargs)
         assert layout in ('TNC', 'NTC'), \
             "Invalid layout %s; must be one of ['TNC' or 'NTC']"%layout
@@ -59,6 +59,7 @@ class _RNNLayer(HybridBlock):
         self._lstm_state_clip_nan = lstm_state_clip_nan
         self._dtype = dtype
         self._use_sequence_length = use_sequence_length
+        self._cudnn_algo = cudnn_algo
 
         self._gates = {'rnn_relu': 1, 'rnn_tanh': 1, 'lstm': 4, 'gru': 3}[mode]
 
@@ -283,7 +284,8 @@ class _RNNLayer(HybridBlock):
                     p=self._dropout, state_outputs=True, mode=self._mode,
                     lstm_state_clip_min=self._lstm_state_clip_min,
                     lstm_state_clip_max=self._lstm_state_clip_max,
-                    lstm_state_clip_nan=self._lstm_state_clip_nan)
+                    lstm_state_clip_nan=self._lstm_state_clip_nan,
+                    cudnn_algo=self._cudnn_algo)
 
 
         if self._mode == 'lstm':
@@ -345,6 +347,10 @@ class RNN(_RNNLayer):
         Prefix of this `Block`.
     params : ParameterDict or None
         Shared Parameters for this `Block`.
+    cudnn_algo: str, default '-1'
+        The cuDNN RNN algorithm used for forward/backward computation.
+        Value of '0' denotes the standard algorithm, '1' denotes the persistent
+        algorithm.
 
 
     Inputs:
