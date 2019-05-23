@@ -1324,7 +1324,8 @@ class RNNOp {
       cudnnRNNAlgo_t rnn_algo = (param_.cudnn_algo == -1) ? CUDNN_RNN_ALGO_STANDARD
                                                 : static_cast<cudnnRNNAlgo_t>(param_.cudnn_algo);
       cudnnDataType_t rnn_math_prec = dtype_;
-      if (rnn_algo == CUDNN_RNN_ALGO_PERSIST_STATIC) {
+      if (rnn_math_prec == CUDNN_DATA_HALF && (rnn_algo == CUDNN_RNN_ALGO_PERSIST_STATIC ||
+                                               !SupportsFloat16Compute(ctx.run_ctx.ctx.dev_id))) {
         rnn_math_prec = CUDNN_DATA_FLOAT;
       }
 
