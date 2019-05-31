@@ -86,11 +86,23 @@ class _Conv(HybridBlock):
         Initializer for the `weight` weights matrix.
     bias_initializer: str or `Initializer`
         Initializer for the bias vector.
+    cudnn_algo_fwd: str, default '-1'
+        The cuDNN Convolution algorithm for forward computation.
+        Value of '0' denotes the implicit GEMM algorithm. For
+        more details refer to cuDNN documentation on cudnnConvolutionFwdAlgo_t.
+    cudnn_algo_bwd_data: str, default '-1'
+        The cuDNN Convolution algorithm for backward computation for data.
+    cudnn_algo_bwd_filter: str, default '-1'
+        The cuDNN Convolution algorithm for backward computation for filter.
+    cudnn_tensor_core_only: bool, default False
+        Whether to force cuDNN Convolution algorithm to use tensor cores.
     """
     def __init__(self, channels, kernel_size, strides, padding, dilation,
                  groups, layout, in_channels=0, activation=None, use_bias=True,
                  weight_initializer=None, bias_initializer='zeros',
-                 op_name='Convolution', adj=None, prefix=None, params=None):
+                 op_name='Convolution', adj=None, prefix=None, params=None,
+                 cudnn_algo_fwd='-1', cudnn_algo_bwd_data='-1', cudnn_algo_bwd_filter='-1',
+                 cudnn_tensor_core_only=False):
         super(_Conv, self).__init__(prefix=prefix, params=params)
         with self.name_scope():
             self._channels = channels
@@ -106,6 +118,12 @@ class _Conv(HybridBlock):
                 'kernel': kernel_size, 'stride': strides, 'dilate': dilation,
                 'pad': padding, 'num_filter': channels, 'num_group': groups,
                 'no_bias': not use_bias, 'layout': layout}
+            if op_name == 'Convolution':
+                self._kwargs.update({
+                    'cudnn_algo_fwd': cudnn_algo_fwd,
+                    'cudnn_algo_bwd_data': cudnn_algo_bwd_data,
+                    'cudnn_algo_bwd_filter': cudnn_algo_bwd_filter,
+                    'cudnn_tensor_core_only': cudnn_tensor_core_only})
             if adj is not None:
                 self._kwargs['adj'] = adj
 

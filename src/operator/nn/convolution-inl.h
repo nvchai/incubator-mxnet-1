@@ -66,6 +66,11 @@ struct ConvolutionParam : public dmlc::Parameter<ConvolutionParam> {
   bool no_bias;
   dmlc::optional<int> cudnn_tune;
   bool cudnn_off;
+  bool cudnn_tensor_core_only;
+  int32_t cudnn_algo_fwd;
+  int32_t cudnn_algo_bwd_data;
+  int32_t cudnn_algo_bwd_filter;
+
   dmlc::optional<int> layout;
   DMLC_DECLARE_PARAMETER(ConvolutionParam) {
     DMLC_DECLARE_FIELD(kernel).describe("Convolution kernel size: (w,), (h, w) or (d, h, w)");
@@ -95,6 +100,8 @@ struct ConvolutionParam : public dmlc::Parameter<ConvolutionParam> {
         .describe("Whether to pick convolution algo by running performance test.");
     DMLC_DECLARE_FIELD(cudnn_off).set_default(false)
     .describe("Turn off cudnn for this layer.");
+    DMLC_DECLARE_FIELD(cudnn_tensor_core_only).set_default(false)
+        .describe("Require Tensor Core math within the algos.");
     DMLC_DECLARE_FIELD(layout)
     .add_enum("NCW", mshadow::kNCW)
     .add_enum("NCHW", mshadow::kNCHW)
@@ -105,6 +112,12 @@ struct ConvolutionParam : public dmlc::Parameter<ConvolutionParam> {
     .describe("Set layout for input, output and weight. Empty for\n    "
               "default layout: NCW for 1d, NCHW for 2d and NCDHW for 3d."
               "NHWC and NDHWC are only supported on GPU.");
+    DMLC_DECLARE_FIELD(cudnn_algo_fwd).set_default(-1)
+    .describe("Specified Forward Algorithm.");
+    DMLC_DECLARE_FIELD(cudnn_algo_bwd_data).set_default(-1)
+    .describe("Specified Backprop-to-Data Algorithm.");
+    DMLC_DECLARE_FIELD(cudnn_algo_bwd_filter).set_default(-1)
+    .describe("Specified Backprop-to-Filter Algorithm.");
   }
   // Adjusts kernel size for effects of dilation in the dimension `dim`.
   index_t DilatedKernelSize(int dim) const {
@@ -122,7 +135,11 @@ struct ConvolutionParam : public dmlc::Parameter<ConvolutionParam> {
            this->no_bias == other.no_bias &&
            this->cudnn_tune == other.cudnn_tune &&
            this->cudnn_off == other.cudnn_off &&
-           this->layout == other.layout;
+           this->layout == other.layout &&
+           this->cudnn_tensor_core_only == other.cudnn_tensor_core_only &&
+           this->cudnn_algo_fwd == other.cudnn_algo_fwd &&
+           this->cudnn_algo_bwd_data == other.cudnn_algo_bwd_data &&
+           this->cudnn_algo_bwd_filter == other.cudnn_algo_bwd_filter;
   }
 };
 
@@ -149,6 +166,11 @@ struct hash<mxnet::op::ConvolutionParam> {
     ret = dmlc::HashCombine(ret, val.cudnn_tune);
     ret = dmlc::HashCombine(ret, val.cudnn_off);
     ret = dmlc::HashCombine(ret, val.layout);
+    ret = dmlc::HashCombine(ret, val.cudnn_tensor_core_only);
+    ret = dmlc::HashCombine(ret, val.cudnn_algo_fwd);
+    ret = dmlc::HashCombine(ret, val.cudnn_algo_bwd_data);
+    ret = dmlc::HashCombine(ret, val.cudnn_algo_bwd_filter);
+
     return ret;
   }
 };

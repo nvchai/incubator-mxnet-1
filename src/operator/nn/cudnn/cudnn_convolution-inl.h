@@ -683,7 +683,7 @@ class CuDNNConvolutionOp {
                                       fwd_results.data()));
     fwd_results.resize(actual_fwd_algos);
     AlgoFinalSelect<cudnnConvolutionFwdAlgoPerf_t,
-                    cudnnConvolutionFwdAlgo_t>(fwd_results, "forward",
+                    cudnnConvolutionFwdAlgo_t>(fwd_results, "forward", param_.cudnn_algo_fwd,
                                                workspace_byte, fwd);
 
     // Backprop-to-Filter Algorithm Find/Get() v7
@@ -706,7 +706,7 @@ class CuDNNConvolutionOp {
     bwd_filt_results.resize(actual_bwd_filter_algos);
     AlgoFinalSelect<cudnnConvolutionBwdFilterAlgoPerf_t,
                     cudnnConvolutionBwdFilterAlgo_t>(bwd_filt_results, "backprop-to-filter",
-                                                     workspace_byte, flt);
+                                 param_.cudnn_algo_bwd_filter, workspace_byte, flt);
 
     // Backprop-to-Data Algorithm Find/Get() v7
     auto max_bwd_data_algos = MaxBackwardDataAlgos(s->dnn_handle_);
@@ -726,7 +726,7 @@ class CuDNNConvolutionOp {
     bwd_data_results.resize(actual_bwd_data_algos);
     AlgoFinalSelect<cudnnConvolutionBwdDataAlgoPerf_t,
                     cudnnConvolutionBwdDataAlgo_t>(bwd_data_results, "backprop-to-data",
-                                                   workspace_byte, bwd, exclude_dgrad_algo_);
+                                 param_.cudnn_algo_bwd_data, workspace_byte, bwd, exclude_dgrad_algo_);
 #else
     // CUDNN_MAJOR < 7
     const int kMaxAlgos = 10;
@@ -734,7 +734,9 @@ class CuDNNConvolutionOp {
     int i = 0;
     size_t min_memory_needs = 0;
     // Forward Algorithm Find/Get, v6 and earlier
-    if (CUDNN_MAJOR == 6 && param_.layout.value() == mshadow::kNHWC) {
+    if (param_.cudnn_algo_fwd != -1) {
+      fwd->Set(static_cast<cudnnConvolutionFwdAlgo_t>(param_.cudnn_algo_fwd), false);
+    } else if (CUDNN_MAJOR == 6 && param_.layout.value() == mshadow::kNHWC) {
       // In cuDNNv6, for kNHWC, only CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM is
       // supported.  Hard-coded this since the algo find() or get() throws an FPE.
       fwd->Set(CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, false);
@@ -775,7 +777,10 @@ class CuDNNConvolutionOp {
       }
     }
     // Backprop-to-Filter Algorithm Find/Get, v6 and earlier
-    if (!param_.cudnn_tune.value()) {
+    if (param_.cudnn_algo_bwd_filter != -1) {
+      flt->Set(
+        static_cast<cudnnConvolutionBwdFilterAlgo_t>(param_.cudnn_algo_bwd_filter), false);
+    } else if (!param_.cudnn_tune.value()) {
       cudnnConvolutionBwdFilterAlgo_t fastest_bwd_filt_algo;
       CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(s->dnn_handle_,
                                         in_desc_,
@@ -813,7 +818,10 @@ class CuDNNConvolutionOp {
       }
     }
     // Backprop-to-Data Algorithm Get(), v6 and earlier
-    if (!param_.cudnn_tune.value()) {
+    if (param_.cudnn_algo_bwd_data != -1) {
+      bwd->Set(static_cast<cudnnConvolutionBwdDataAlgo_t>(param_.cudnn_algo_bwd_data),
+                     false);
+    } else if (!param_.cudnn_tune.value()) {
       cudnnConvolutionBwdDataAlgo_t fastest_bwd_data_algo;
       CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(s->dnn_handle_,
                                           filter_desc_,
@@ -922,6 +930,7 @@ class CuDNNConvolutionOp {
   // workspace constraints.
   template <typename PerfType, typename AlgoType>
   void AlgoFinalSelect(const std::vector<PerfType> &perf_results, std::string kernel_name,
+                       int32_t algo_preference,
                        size_t workspace_byte, CuDNNAlgo<AlgoType> *algo,
                        int32_t algo_exclude = -1) {
     // Determine the fastest acceptable algo that matches the algo_preference (-1 = any),
@@ -933,12 +942,14 @@ class CuDNNConvolutionOp {
       bool algo_is_tensor_core = false;
       #if CUDNN_MAJOR >= 7
         algo_is_tensor_core = result.mathType == CUDNN_TENSOR_OP_MATH;
+        algo_exclusion &&= (param_.cudnn_tensor_core_only && !algo_is_tensor_core);
       #endif
       if (result.status == CUDNN_STATUS_SUCCESS &&
         #if CUDNN_MAJOR >= 7
           (!enforce_determinism || result.determinism == cudnnDeterminism_t::CUDNN_DETERMINISTIC) &&
         #endif
           (param_.cudnn_tune.value() == conv::kLimited || result.memory <= workspace_byte) &&
+          (algo_preference == -1 || algo_preference == result.algo) &&
           !algo_exclusion) {
         algo->Set(result.algo, algo_is_tensor_core);
         return;
