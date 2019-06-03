@@ -942,7 +942,7 @@ class CuDNNConvolutionOp {
       bool algo_is_tensor_core = false;
       #if CUDNN_MAJOR >= 7
         algo_is_tensor_core = result.mathType == CUDNN_TENSOR_OP_MATH;
-        algo_exclusion &&= (param_.cudnn_tensor_core_only && !algo_is_tensor_core);
+        algo_exclusion = algo_exclusion || (param_.cudnn_tensor_core_only && !algo_is_tensor_core);
       #endif
       if (result.status == CUDNN_STATUS_SUCCESS &&
         #if CUDNN_MAJOR >= 7
